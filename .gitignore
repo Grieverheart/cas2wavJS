@@ -1,0 +1,10 @@
+*.dSYM
+*.swp
+main
+main_new
+.DS_Store
+cas2wav.js
+*.wasm
+*.wav
+cas2wav
+

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>cas2wav</title>
+        <script type="text/javascript" src="cas2wav.js"></script>
+    </head>
+    <body>
+        <input type="file" id="file-selector" multiple>
+        <audio controls id="audio" >
+          Your browser does not support the audio element.
+        </audio>
+        <script>
+          const fileSelector = document.getElementById('file-selector');
+          fileSelector.addEventListener('change', (event) => {
+            const fileList = event.target.files;
+            fileList[0].arrayBuffer().then( (buffer) => {
+                const view = new Uint8Array(buffer);
+                var cas_ptr = Module._malloc(view.length);
+                Module.HEAPU8.set(view, cas_ptr);
+                var wav_size_ptr = Module._malloc(4);
+                var wav_ptr = Module.ccall(
+                    'cas2wav',
+                    'number',
+                    ['number', 'number', 'number', 'number', 'number'],
+                    [cas_ptr, view.length, wav_size_ptr, -1, 1200]
+                );
+                console.log(wav_ptr);
+                const wav_size = Module.HEAPU32[wav_size_ptr/4];
+                wav_data = Module.HEAPU8.subarray(wav_ptr, wav_ptr + wav_size);
+                console.log(wav_data);
+
+                const blob = new Blob([ wav_data ], { type: 'audio/wav' });
+                const url = URL.createObjectURL(blob);
+
+                const audioSelector = document.getElementById('audio')
+                console.log(audioSelector);
+                audioSelector.src = url;
+                audioSelector.load();
+            });
+          });
+        </script>
+    </body>
+</html>
