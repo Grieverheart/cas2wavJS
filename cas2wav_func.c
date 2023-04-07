@@ -1,31 +1,13 @@
-/**************************************************************************/
-/*                                                                        */
-/* file:         cas2wav.c                                                */
-/* version:      1.31 (April 11, 2016)                                    */
-/*                                                                        */
-/* description:  This tool exports the contents of a .cas file to a .wav  */
-/*               file. The .cas format is the standard format for MSX to  */
-/*               emulate tape recorders. The wav can be copied onto a     */
-/*               tape to be read by a real MSX.                           */
-/*                                                                        */
-/*                                                                        */
-/*  This program is free software; you can redistribute it and/or modify  */
-/*  it under the terms of the GNU General Public License as published by  */
-/*  the Free Software Foundation; either version 2, or (at your option)   */
-/*  any later version. See COPYING for more details.                      */
-/*                                                                        */
-/*                                                                        */
-/* Copyright 2001-2016 Vincent van Dam (vincentd@erg.verweg.com)          */
-/* MultiCPU Copyright 2007 Ramones     (ramones@kurarizeku.net)           */
-/*                                                                        */
-/**************************************************************************/
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <math.h>
+
+#ifdef MAIN
+#include <stdio.h>
+#endif
 
 /* CPU type defines */
 #if (BIGENDIAN)
@@ -36,6 +18,7 @@
                                  ((value & 0x0000FF00) << 8)  | \
                                  ((value & 0x00FF0000) >> 8)  | \
                                  ((value & 0xFF000000) >> 24) )
+
 #define BIGENDIANLONG(value)   BIGENDIANINT(value) // I suppose Long=int
 #else
 #define BIGENDIANSHORT(value) value
@@ -124,15 +107,15 @@ typedef struct
   uint16_t  wBitsPerSample;
   char      DataID[4];
   uint32_t  nDataBytes;
-} WAVE_HEADER;
+} WaveHeader;
 
 
 
 /* write a pulse */
-static inline void writePulse(Buffer* buffer, uint32_t f, uint32_t BAUDRATE)
+static inline void write_pulse(Buffer* buffer, uint32_t f, uint32_t baud_rate)
 {
     uint32_t n;
-    double length = OUTPUT_FREQUENCY / (BAUDRATE * (f / 1200));
+    double length = OUTPUT_FREQUENCY / (baud_rate * (f / 1200));
     double scale  = 2.0 * M_PI / (double)length;
 
     // @todo: maybe resize
@@ -144,53 +127,52 @@ static inline void writePulse(Buffer* buffer, uint32_t f, uint32_t BAUDRATE)
 }
 
 /* write a header signal */
-static inline void writeHeader(Buffer* output, uint32_t s, uint32_t BAUDRATE)
+static inline void write_header(Buffer* output, uint32_t s, uint32_t baud_rate)
 {
-    for(int i = 0; i < s*(BAUDRATE/1200); ++i) writePulse(output, SHORT_PULSE, BAUDRATE);
+    for(int i = 0; i < s*(baud_rate/1200); ++i) write_pulse(output, SHORT_PULSE, baud_rate);
 }
 
 
 
 /* write silence */
-static inline void writeSilence(Buffer *buffer, uint32_t s)
+static inline void write_silence(Buffer *buffer, uint32_t s)
 {
     buffer_fill(buffer, 128u, s);
 }
 
 
-
 /* write a byte */
-static inline void writeByte(Buffer* buffer, int byte, uint32_t BAUDRATE)
+static inline void write_byte(Buffer* buffer, int byte, uint32_t baud_rate)
 {
     /* one start bit */
-    writePulse(buffer, LONG_PULSE, BAUDRATE);
+    write_pulse(buffer, LONG_PULSE, baud_rate);
 
     /* eight data bits */
     for(int i = 0; i < 8; ++i)
     {
         if(byte & 1)
         {
-            writePulse(buffer, SHORT_PULSE, BAUDRATE);
-            writePulse(buffer, SHORT_PULSE, BAUDRATE);
+            write_pulse(buffer, SHORT_PULSE, baud_rate);
+            write_pulse(buffer, SHORT_PULSE, baud_rate);
         }
         else
-            writePulse(buffer, LONG_PULSE, BAUDRATE);
+            write_pulse(buffer, LONG_PULSE, baud_rate);
 
         byte >>= 1;
     }
 
     /* two stop bits */
     for(int i = 0; i < 4; ++i)
-        writePulse(buffer, SHORT_PULSE, BAUDRATE);
+        write_pulse(buffer, SHORT_PULSE, baud_rate);
 }
 
 
 
 /* write data until a header is detected */
-static inline void writeData(const uint8_t* data, uint32_t size_data, uint32_t *position, Buffer* buffer, uint32_t BAUDRATE, bool* eof)
+static inline void write_data(const uint8_t* data, uint32_t size_data, uint32_t *position, Buffer* buffer, uint32_t baud_rate, bool* eof)
 {
     int  read = 8;
-    char file_buffer[8];
+    const uint8_t* file_buffer = NULL;
 
     *eof = false;
     while(true)
@@ -201,15 +183,17 @@ static inline void writeData(const uint8_t* data, uint32_t size_data, uint32_t *
             break;
         }
 
-        const uint8_t* file_buffer = data + *position;
+        file_buffer = data + *position;
         if(memcmp(file_buffer, HEADER, 8) == 0) return;
 
-        writeByte(buffer, file_buffer[0], BAUDRATE);
+        write_byte(buffer, file_buffer[0], baud_rate);
         if(file_buffer[0] == 0x1a) *eof = true;
         ++*position;
     }
 
-    for(int i = 0; i < read; ++i) writeByte(buffer, file_buffer[i], BAUDRATE);
+    if(!file_buffer) return;
+
+    for(int i = 0; i < read; ++i) write_byte(buffer, file_buffer[i], baud_rate);
 
     if(file_buffer[0] == 0x1a) *eof = true;
     *position += read;
@@ -218,18 +202,15 @@ static inline void writeData(const uint8_t* data, uint32_t size_data, uint32_t *
 }
 
 
-uint8_t* cas2wav(const uint8_t* cas, uint32_t cas_size, uint32_t* wav_size, int stime, uint32_t BAUDRATE)
+uint8_t* cas2wav(const uint8_t* cas, uint32_t cas_size, uint32_t* wav_size, int stime, uint32_t baud_rate)
 {
     Buffer wav_buffer;
-    wav_buffer.size = sizeof(WAVE_HEADER);
-    wav_buffer.capacity = 2 * sizeof(WAVE_HEADER);
+    wav_buffer.size = sizeof(WaveHeader);
+    wav_buffer.capacity = 2 * sizeof(WaveHeader);
     wav_buffer.data = (uint8_t*) malloc(wav_buffer.capacity);
 
-    ///* write initial .wav header */
-    //memcpy(wav_buffer.data, (uint8_t*)&waveheader, sizeof(waveheader));
-
-    uint32_t position = 0;
     /* search for a header in the .cas file */
+    uint32_t position = 0;
     while(true)
     {
         if(position + 8 > cas_size) break;
@@ -246,9 +227,9 @@ uint8_t* cas2wav(const uint8_t* cas, uint32_t cas_size, uint32_t* wav_size, int 
             position += 8;
             if(position + 10 > cas_size)
             {
-                writeSilence(&wav_buffer, (stime > 0)? OUTPUT_FREQUENCY*stime: LONG_SILENCE);
-                writeHeader(&wav_buffer, LONG_HEADER, BAUDRATE);
-                writeData(cas, cas_size, &position, &wav_buffer, BAUDRATE, &eof);
+                write_silence(&wav_buffer, (stime > 0)? OUTPUT_FREQUENCY*stime: LONG_SILENCE);
+                write_header(&wav_buffer, LONG_HEADER, baud_rate);
+                write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
                 free(wav_buffer.data);
                 return NULL;
             }
@@ -257,35 +238,35 @@ uint8_t* cas2wav(const uint8_t* cas, uint32_t cas_size, uint32_t* wav_size, int 
 
             if(memcmp(buffer, ASCII, 10) == 0)
             {
-                writeSilence(&wav_buffer, (stime > 0)? OUTPUT_FREQUENCY*stime: LONG_SILENCE);
-                writeHeader(&wav_buffer, LONG_HEADER, BAUDRATE);
-                writeData(cas, cas_size, &position, &wav_buffer, BAUDRATE, &eof);
+                write_silence(&wav_buffer, (stime > 0)? OUTPUT_FREQUENCY*stime: LONG_SILENCE);
+                write_header(&wav_buffer, LONG_HEADER, baud_rate);
+                write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
 
                 do
                 {
                     position += 8;
-                    writeSilence(&wav_buffer, SHORT_SILENCE);
-                    writeHeader(&wav_buffer, SHORT_HEADER, BAUDRATE);
-                    writeData(cas, cas_size, &position, &wav_buffer, BAUDRATE, &eof);
+                    write_silence(&wav_buffer, SHORT_SILENCE);
+                    write_header(&wav_buffer, SHORT_HEADER, baud_rate);
+                    write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
                 }
                 while(!eof && position < cas_size);
 
             }
             else if (!memcmp(buffer, BIN, 10) || !memcmp(buffer, BASIC, 10))
             {
-                writeSilence(&wav_buffer,stime>0?OUTPUT_FREQUENCY*stime:LONG_SILENCE);
-                writeHeader(&wav_buffer,LONG_HEADER, BAUDRATE);
-                writeData(cas, cas_size, &position, &wav_buffer, BAUDRATE, &eof);
-                writeSilence(&wav_buffer,SHORT_SILENCE);
-                writeHeader(&wav_buffer,SHORT_HEADER, BAUDRATE);
+                write_silence(&wav_buffer,stime>0?OUTPUT_FREQUENCY*stime:LONG_SILENCE);
+                write_header(&wav_buffer,LONG_HEADER, baud_rate);
+                write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
+                write_silence(&wav_buffer,SHORT_SILENCE);
+                write_header(&wav_buffer,SHORT_HEADER, baud_rate);
                 position+=8;
-                writeData(cas, cas_size, &position, &wav_buffer, BAUDRATE, &eof);
+                write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
             }
             else
             {
-                writeSilence(&wav_buffer,LONG_SILENCE);
-                writeHeader(&wav_buffer,LONG_HEADER, BAUDRATE);
-                writeData(cas, cas_size, &position, &wav_buffer, BAUDRATE, &eof);
+                write_silence(&wav_buffer,LONG_SILENCE);
+                write_header(&wav_buffer,LONG_HEADER, baud_rate);
+                write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
             }
 
         }
@@ -296,7 +277,7 @@ uint8_t* cas2wav(const uint8_t* cas, uint32_t cas_size, uint32_t* wav_size, int 
         }
     }
 
-    WAVE_HEADER waveheader =
+    WaveHeader waveheader =
     {
         { "RIFF" },
         BIGENDIANLONG(0),
@@ -327,6 +308,7 @@ uint8_t* cas2wav(const uint8_t* cas, uint32_t cas_size, uint32_t* wav_size, int 
     return wav;
 }
 
+#ifdef MAIN
 int main(int argc, char* argv[])
 {
   FILE *output,*input;
@@ -336,7 +318,7 @@ int main(int argc, char* argv[])
   char *ifile = NULL;
   char *ofile = NULL;
 
-  uint32_t BAUDRATE = 1200;
+  uint32_t baud_rate = 1200;
   /* parse command line options */
   for (i=1; i<argc; i++) {
 
@@ -346,7 +328,7 @@ int main(int argc, char* argv[])
 
         switch(argv[i][j]) {
 
-        case '2': BAUDRATE=2400; break;
+        case '2': baud_rate=2400; break;
         case 's': stime=atof(argv[++i]); j=-1; break;
 
         default:
@@ -383,7 +365,7 @@ int main(int argc, char* argv[])
   fclose(input);
 
   uint32_t wav_size;
-  uint8_t* wav = cas2wav(cas, cas_size, &wav_size, stime, BAUDRATE);
+  uint8_t* wav = cas2wav(cas, cas_size, &wav_size, stime, baud_rate);
 
 
   fwrite(wav, 1, wav_size, output);
@@ -391,4 +373,5 @@ int main(int argc, char* argv[])
 
   return 0;
 }
+#endif
 

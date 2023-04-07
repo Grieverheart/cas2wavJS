@@ -24,16 +24,13 @@
                     ['number', 'number', 'number', 'number', 'number'],
                     [cas_ptr, view.length, wav_size_ptr, -1, 1200]
                 );
-                console.log(wav_ptr);
                 const wav_size = Module.HEAPU32[wav_size_ptr/4];
                 wav_data = Module.HEAPU8.subarray(wav_ptr, wav_ptr + wav_size);
-                console.log(wav_data);
 
                 const blob = new Blob([ wav_data ], { type: 'audio/wav' });
                 const url = URL.createObjectURL(blob);
 
                 const audioSelector = document.getElementById('audio')
-                console.log(audioSelector);
                 audioSelector.src = url;
                 audioSelector.load();
             });
