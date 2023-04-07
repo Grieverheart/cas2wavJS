@@ -280,7 +280,8 @@ int main(int argc, char* argv[])
 
       do {
 
-        position+=8; fseek(input,position,SEEK_SET);
+        position+=8;
+        fseek(input,position,SEEK_SET);
         writeSilence(output,SHORT_SILENCE);
         writeHeader(output,SHORT_HEADER);
         writeData(input,output,&position,&eof);
@@ -296,7 +297,8 @@ int main(int argc, char* argv[])
       writeData(input,output,&position,&eof);
       writeSilence(output,SHORT_SILENCE);
       writeHeader(output,SHORT_HEADER);
-      position+=8; fseek(input,position,SEEK_SET);
+      position+=8;
+      fseek(input,position,SEEK_SET);
       writeData(input,output,&position,&eof);
 
     } else {

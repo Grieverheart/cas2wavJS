@@ -3,38 +3,110 @@
     <head>
         <title>cas2wav</title>
         <script type="text/javascript" src="cas2wav.js"></script>
+        <script type="text/javascript" src="jszip.min.js"></script>
     </head>
     <body>
-        <input type="file" id="file-selector" multiple>
-        <audio controls id="audio" >
-          Your browser does not support the audio element.
-        </audio>
+        <div style="display: flex; flex-direction: row;">
+            <div style="display: flex; flex-grow: 1;"></div>
+            <div id="content" style="display: flex; flex-direction: column; align-items:center;">
+                <div style="font-size: 2.5em; padding: 0.5rem;">Convert CAS to WAV</div>
+                <div style="display: flex; padding: 0.5rem;">
+                    <label for="baudrate">Baud rate:</label>
+                    <select id="baudrate" style="margin-left: 0.5rem;">
+                        <option value="1200">1200</option>
+                        <option value="2400" selected="selected">2400</option>
+                    </select>
+                </div>
+                <div style="display: flex; padding: 0.5rem;">
+                    <label for="silence">Silence time:</label>
+                    <input id="silence" type="number" min="2" max="10" value="2" size="2" style="margin-left: 0.5rem; width: 3em;">
+                </div>
+                <div id="file-dialog" style="display:flex; padding: 0.5rem;">
+                    <label for="file-selector">Select a CAS file: </label>
+                    <input type="file" id="file-selector" accept=".cas,.zip">
+                </div>
+                <audio controls id="audio"  style="display:flex; padding: 0.5rem;">
+                  Your browser does not support the audio element.
+                </audio>
+            </div>
+            <div style="display: flex; flex-grow: 1;"></div>
+        </div>
+
         <script>
-          const fileSelector = document.getElementById('file-selector');
-          fileSelector.addEventListener('change', (event) => {
-            const fileList = event.target.files;
-            fileList[0].arrayBuffer().then( (buffer) => {
-                const view = new Uint8Array(buffer);
-                var cas_ptr = Module._malloc(view.length);
+            function process_cas_blob(cas_blob)
+            {
+                const baud_rate = document.getElementById("baudrate").value;
+                const stime     = document.getElementById("silence").value;
+
+                const view = new Uint8Array(cas_blob);
+                const cas_ptr = Module._malloc(view.length);
                 Module.HEAPU8.set(view, cas_ptr);
-                var wav_size_ptr = Module._malloc(4);
-                var wav_ptr = Module.ccall(
+                const wav_size_ptr = Module._malloc(4);
+                const mode_ptr     = Module._malloc(4);
+                const wav_ptr = Module.ccall(
                     'cas2wav',
                     'number',
-                    ['number', 'number', 'number', 'number', 'number'],
-                    [cas_ptr, view.length, wav_size_ptr, -1, 1200]
+                    ['number', 'number', 'number', 'number', 'number', 'number'],
+                    [cas_ptr, view.length, wav_size_ptr, mode_ptr, stime, baud_rate]
                 );
                 const wav_size = Module.HEAPU32[wav_size_ptr/4];
+                const mode = Module.HEAPU32[mode_ptr/4];
                 wav_data = Module.HEAPU8.subarray(wav_ptr, wav_ptr + wav_size);
 
                 const blob = new Blob([ wav_data ], { type: 'audio/wav' });
                 const url = URL.createObjectURL(blob);
 
-                const audioSelector = document.getElementById('audio')
+                var command_node = document.getElementById('command');
+                if(command_node == null)
+                {
+                    command_node = document.createElement("div");
+                    command_node.id = "command";
+                }
+
+                if(mode <= 1)
+                    command_node.innerHTML = "Command: LOAD\"CAS:\",R";
+                else if(mode == 2)
+                    command_node.innerHTML = "Command: BLOAD\"CAS:\",R";
+                else if(mode == 3)
+                    command_node.innerHTML = "Command: CLOAD\"CAS:\",R";
+
+                const fileDialogSelector = document.getElementById('file-dialog');
+                const contentSelector = document.getElementById('content');
+                contentSelector.insertBefore(command_node, fileDialogSelector.nextSibling);
+
+                const audioSelector = document.getElementById('audio');
                 audioSelector.src = url;
                 audioSelector.load();
+            }
+
+            const fileSelector = document.getElementById('file-selector');
+            fileSelector.addEventListener('change', (event) => {
+                const fileList = event.target.files;
+
+                if(fileList[0].type == 'application/zip')
+                {
+                    JSZip.loadAsync(fileList[0]).then((zip) => {
+                        var cas_found = false;
+                        for (const [key, value] of Object.entries(zip.files))
+                        {
+                            if(key.endsWith('.cas'))
+                            {
+                                cas_found = true;
+                                value.async("uint8array").then( (cas_blob) => {
+                                    process_cas_blob(cas_blob);
+                                });
+                                break;
+                            }
+                        }
+                    });
+                }
+                else
+                {
+                    fileList[0].arrayBuffer().then( (cas_blob) => {
+                        process_cas_blob(cas_blob);
+                    });
+                }
             });
-          });
         </script>
     </body>
 </html>

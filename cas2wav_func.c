@@ -202,12 +202,16 @@ static inline void write_data(const uint8_t* data, uint32_t size_data, uint32_t 
 }
 
 
-uint8_t* cas2wav(const uint8_t* cas, uint32_t cas_size, uint32_t* wav_size, int stime, uint32_t baud_rate)
+// @todo: Needs some cleaning up. Perhaps implement from scratch?
+uint8_t* cas2wav(const uint8_t* cas, uint32_t cas_size, uint32_t* wav_size, uint32_t* mode, int stime, uint32_t baud_rate)
 {
     Buffer wav_buffer;
     wav_buffer.size = sizeof(WaveHeader);
     wav_buffer.capacity = 2 * sizeof(WaveHeader);
     wav_buffer.data = (uint8_t*) malloc(wav_buffer.capacity);
+
+
+    bool first_header = true;
 
     /* search for a header in the .cas file */
     uint32_t position = 0;
@@ -218,54 +222,76 @@ uint8_t* cas2wav(const uint8_t* cas, uint32_t cas_size, uint32_t* wav_size, int 
         const uint8_t* buffer = cas + position;
         if(memcmp(buffer, HEADER, 8) == 0)
         {
-
             /* it probably works fine if a long header is used for every */
             /* header but since the msx bios makes a distinction between */
             /* them, we do also (hence a lot of code).                   */
 
             bool eof;
             position += 8;
-            if(position + 10 > cas_size)
+            if(position + 10 < cas_size)
             {
-                write_silence(&wav_buffer, (stime > 0)? OUTPUT_FREQUENCY*stime: LONG_SILENCE);
-                write_header(&wav_buffer, LONG_HEADER, baud_rate);
-                write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
-                free(wav_buffer.data);
-                return NULL;
-            }
+                uint32_t current_mode = 0;
+                buffer = cas + position;
 
-            buffer = cas + position;
+                if(!memcmp(buffer, ASCII, 10))      current_mode = 1;
+                else if(!memcmp(buffer, BIN, 10))   current_mode = 2;
+                else if(!memcmp(buffer, BASIC, 10)) current_mode = 3;
 
-            if(memcmp(buffer, ASCII, 10) == 0)
-            {
-                write_silence(&wav_buffer, (stime > 0)? OUTPUT_FREQUENCY*stime: LONG_SILENCE);
-                write_header(&wav_buffer, LONG_HEADER, baud_rate);
-                write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
-
-                do
+                if(first_header)
                 {
-                    position += 8;
-                    write_silence(&wav_buffer, SHORT_SILENCE);
-                    write_header(&wav_buffer, SHORT_HEADER, baud_rate);
+                    *mode = current_mode;
+                    first_header = false;
+                }
+
+                if(current_mode == 0)
+                {
+                    write_silence(&wav_buffer, LONG_SILENCE);
+                    write_header(&wav_buffer, LONG_HEADER, baud_rate);
                     write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
                 }
-                while(!eof && position < cas_size);
+                else if(current_mode == 1)
+                {
+                    // This is the filename.
+                    //for(size_t k = 0; k < 6; ++k)
+                    //    printf("%c", cas[position + 10 + k]);
+                    //printf("\n");
 
-            }
-            else if (!memcmp(buffer, BIN, 10) || !memcmp(buffer, BASIC, 10))
-            {
-                write_silence(&wav_buffer,stime>0?OUTPUT_FREQUENCY*stime:LONG_SILENCE);
-                write_header(&wav_buffer,LONG_HEADER, baud_rate);
-                write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
-                write_silence(&wav_buffer,SHORT_SILENCE);
-                write_header(&wav_buffer,SHORT_HEADER, baud_rate);
-                position+=8;
-                write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
+                    write_silence(&wav_buffer, (stime > 0)? OUTPUT_FREQUENCY*stime: LONG_SILENCE);
+                    write_header(&wav_buffer, LONG_HEADER, baud_rate);
+                    write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
+
+                    do
+                    {
+                        position += 8;
+                        write_silence(&wav_buffer, SHORT_SILENCE);
+                        write_header(&wav_buffer, SHORT_HEADER, baud_rate);
+                        write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
+                    }
+                    while(!eof && position < cas_size);
+
+                }
+                else
+                {
+                    // This is the filename.
+                    //for(size_t k = 0; k < 6; ++k)
+                    //    printf("%c", cas[position + 10 + k]);
+                    //printf("\n");
+
+                    // @note: Unknown file type, using long header.
+                    write_silence(&wav_buffer, (stime > 0)? OUTPUT_FREQUENCY*stime: LONG_SILENCE);
+                    write_header(&wav_buffer, LONG_HEADER, baud_rate);
+                    write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
+                    write_silence(&wav_buffer, SHORT_SILENCE);
+                    write_header(&wav_buffer, SHORT_HEADER, baud_rate);
+                    position+=8;
+                    write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
+                }
             }
             else
             {
-                write_silence(&wav_buffer,LONG_SILENCE);
-                write_header(&wav_buffer,LONG_HEADER, baud_rate);
+                // @note: Unknown file type, using long header.
+                write_silence(&wav_buffer, (stime > 0)? OUTPUT_FREQUENCY*stime: LONG_SILENCE);
+                write_header(&wav_buffer, LONG_HEADER, baud_rate);
                 write_data(cas, cas_size, &position, &wav_buffer, baud_rate, &eof);
             }
 
@@ -364,8 +390,8 @@ int main(int argc, char* argv[])
   fread(cas, 1, cas_size, input);
   fclose(input);
 
-  uint32_t wav_size;
-  uint8_t* wav = cas2wav(cas, cas_size, &wav_size, stime, baud_rate);
+  uint32_t wav_size, mode;
+  uint8_t* wav = cas2wav(cas, cas_size, &wav_size, &mode, stime, baud_rate);
 
 
   fwrite(wav, 1, wav_size, output);
