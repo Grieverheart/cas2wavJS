@@ -5,32 +5,34 @@
         <script type="text/javascript" src="cas2wav.js"></script>
         <script type="text/javascript" src="jszip.min.js"></script>
     </head>
-    <body>
+    <body style="display: flex; flex-direction: column; height:100vh; margin: 0; font-size: 4vmin;">
+        <div style="flex-grow: 1;"></div>
         <div style="display: flex; flex-direction: row;">
-            <div style="display: flex; flex-grow: 1;"></div>
+            <div style="flex-grow: 1;"></div>
             <div id="content" style="display: flex; flex-direction: column; align-items:center;">
-                <div style="font-size: 2.5em; padding: 0.5rem;">Convert CAS to WAV</div>
-                <div style="display: flex; padding: 0.5rem;">
+                <h1>Convert CAS to WAV</h1>
+                <div style="display: flex; padding: 0.5em; align-items: center;">
                     <label for="baudrate">Baud rate:</label>
-                    <select id="baudrate" style="margin-left: 0.5rem;">
+                    <select id="baudrate" style="margin-left: 0.5em; font-size: 0.7em;">
                         <option value="1200">1200</option>
                         <option value="2400" selected="selected">2400</option>
                     </select>
                 </div>
-                <div style="display: flex; padding: 0.5rem;">
+                <div style="display: flex; padding: 0.5em; align-items: center;">
                     <label for="silence">Silence time:</label>
-                    <input id="silence" type="number" min="2" max="10" value="2" size="2" style="margin-left: 0.5rem; width: 3em;">
+                    <input id="silence" type="number" min="2" max="10" value="2" size="2" style="margin-left: 0.5em; font-size: 0.7em;">
                 </div>
-                <div id="file-dialog" style="display:flex; padding: 0.5rem;">
+                <div id="file-dialog" style="display:flex; padding: 0.5em; align-items: center;">
                     <label for="file-selector">Select a CAS file: </label>
-                    <input type="file" id="file-selector" accept=".cas,.zip">
+                    <input type="file" id="file-selector" accept=".cas,.zip" style="font-size: 0.7em;">
                 </div>
-                <audio controls id="audio"  style="display:flex; padding: 0.5rem;">
+                <audio controls id="audio"  style="display:flex; padding: 0.5em; width: 100%;">
                   Your browser does not support the audio element.
                 </audio>
             </div>
-            <div style="display: flex; flex-grow: 1;"></div>
+            <div style="flex-grow: 1;"></div>
         </div>
+        <div style="flex-grow: 1;"></div>
 
         <script>
             function process_cas_blob(cas_blob)
