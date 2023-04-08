@@ -13,7 +13,9 @@ You need to serve `index.html` for example using Python:
 ```
 python -m http.server
 ```
-and then visit the site (localhost) to load the application or you can visit [http://nicktasios.nl/projects/cas2wav.html](http://nicktasios.nl/projects/cas2wav.html).
+and then visit the site (localhost) to load the application or you can visit [http://nicktasios.nl/projects/cas2wav.html](http://nicktasios.nl/projects/cas2wav).
+
+You can load either a CAS file or a ZIP file containing a CAS file.
 
 For creating cables for your MSX, you can check [http://www.finnov.net/~wierzbowsky/caslink2.htm](http://www.finnov.net/~wierzbowsky/caslink2.htm).
 

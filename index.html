@@ -22,8 +22,8 @@
                     <label for="silence">Silence time:</label>
                     <input id="silence" type="number" min="2" max="10" value="2" size="2" style="margin-left: 0.5em; font-size: 0.7em;">
                 </div>
-                <div id="file-dialog" style="display:flex; padding: 0.5em; align-items: center;">
-                    <label for="file-selector">Select a CAS file: </label>
+                <div id="file-dialog" style="display:flex; padding: 0.5em; align-items: center; flex-wrap: wrap; justify-content: center;">
+                    <label for="file-selector">Select a CAS or ZIP file containing a CAS: </label>
                     <input type="file" id="file-selector" accept=".cas,.zip" style="font-size: 0.7em;">
                 </div>
                 <audio controls id="audio"  style="display:flex; padding: 0.5em; width: 100%;">
