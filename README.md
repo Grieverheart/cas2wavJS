@@ -17,6 +17,6 @@ and then visit the site (localhost) to load the application or you can visit [ht
 
 For creating cables for your MSX, you can check [http://www.finnov.net/~wierzbowsky/caslink2.htm](http://www.finnov.net/~wierzbowsky/caslink2.htm).
 
-#Contributing
+# Contributing
 
 If you'd like to contribute, either create an issue with your question/request, or make a pull request. Currently the UI is very basic, and if you'd like to create simple and clean interface I'd appreciate it.
